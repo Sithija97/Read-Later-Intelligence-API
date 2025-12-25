@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { getClerkClient, verifyToken } from "../config/clerk";
 import { AuthRequest } from "../shared/types/express";
+import { ClerkJwtPayload } from "../shared/types/clerk";
 import { ApiResponse } from "../shared/utils/apiResponse";
 import { logger } from "../shared/utils/logger";
 import { ERROR_MESSAGES } from "../shared/constants/errors";
@@ -28,8 +29,8 @@ export async function requireClerkAuth(
     const token = authHeader.substring(7); // Remove "Bearer " prefix
 
     // Verify token with Clerk and get userId from payload
-    const verifyResult = await verifyToken(token);
-    const userId = (verifyResult as any).sub || (verifyResult as any).userId;
+    const verifyResult = (await verifyToken(token)) as ClerkJwtPayload;
+    const userId = verifyResult.sub || verifyResult.userId;
 
     if (!userId) {
       ApiResponse.error(res, ERROR_MESSAGES.INVALID_TOKEN, 401);
@@ -47,7 +48,7 @@ export async function requireClerkAuth(
 
     // Extract email - prioritize primary email
     const primaryEmail = clerkUser.emailAddresses.find(
-      (email: any) => email.id === clerkUser.primaryEmailAddressId
+      (email) => email.id === clerkUser.primaryEmailAddressId
     );
     const email = primaryEmail?.emailAddress || clerkUser.emailAddresses[0]?.emailAddress;
 

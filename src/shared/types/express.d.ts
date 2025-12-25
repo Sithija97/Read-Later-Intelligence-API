@@ -20,10 +20,19 @@ export interface AuthRequest extends Request {
 }
 
 /**
- * Request with authenticated ProductUser (from attachUser middleware)
+ * Extended ProductUser with identity info from Clerk
+ */
+export interface ExtendedProductUser extends IProductUser {
+  email: string;
+  name?: string;
+}
+
+/**
+ * Request with authenticated ProductUser + identity info (from attachUser middleware)
  * Used for protected routes that require an existing local ProductUser
+ * Includes email and name from Clerk for convenience
  */
 export interface UserRequest extends Request {
-  user: IProductUser;
+  user: ExtendedProductUser;
 }
 

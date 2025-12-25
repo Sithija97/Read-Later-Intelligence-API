@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { MongooseDuplicateKeyError } from "../shared/types/clerk";
 import { ApiResponse } from "../shared/utils/apiResponse";
 import { logger } from "../shared/utils/logger";
 import { ERROR_MESSAGES } from "../shared/constants/errors";
@@ -21,7 +22,8 @@ export function errorHandler(
   }
 
   // Handle duplicate key errors
-  if ((err as any).code === 11000) {
+  const mongooseError = err as MongooseDuplicateKeyError;
+  if (mongooseError.code === 11000) {
     ApiResponse.error(res, ERROR_MESSAGES.USER_ALREADY_EXISTS, 409);
     return;
   }

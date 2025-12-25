@@ -21,6 +21,7 @@ const ProductUserSchema: Schema = new Schema(
   },
   {
     timestamps: true,
+    collection: "productusers", // Explicitly set collection name
   }
 );
 

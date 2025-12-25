@@ -10,6 +10,6 @@ export function setupRoutes(app: Express): void {
   app.use("/api/v1", healthRoutes);
 
   // Authentication routes
-  app.use("/api/auth", authRoutes);
+  app.use("/api/v1/auth", authRoutes);
 }
 

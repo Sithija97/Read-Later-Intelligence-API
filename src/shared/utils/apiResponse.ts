@@ -4,7 +4,7 @@ import { Response } from "express";
  * Standard API response utility
  */
 export class ApiResponse {
-  static success(res: Response, data: any, message?: string, statusCode = 200): void {
+  static success<T = unknown>(res: Response, data: T, message?: string, statusCode = 200): void {
     res.status(statusCode).json({
       status: "success",
       message,
@@ -12,15 +12,15 @@ export class ApiResponse {
     });
   }
 
-  static error(res: Response, message: string, statusCode = 500, errors?: any): void {
+  static error(res: Response, message: string, statusCode = 500, errors?: unknown): void {
     res.status(statusCode).json({
       status: "error",
       message,
-      ...(errors && { errors }),
+      ...(typeof errors === "object" && errors !== null ? { errors } : {}),
     });
   }
 
-  static created(res: Response, data: any, message?: string): void {
+  static created<T = unknown>(res: Response, data: T, message?: string): void {
     this.success(res, data, message, 201);
   }
 }
