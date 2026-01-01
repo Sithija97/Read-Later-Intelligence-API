@@ -1,12 +1,10 @@
 import { Router } from "express";
-import { checkHealth } from "./health.controller";
 import { attachUser } from "../../middlewares/attachUser";
+import { createItem } from "./items.controller";
 
 const router = Router();
 
-/**
- * Health check routes
- */
-router.get("/health", attachUser, checkHealth);
+/* Articles routes */
+router.post("/create-item", attachUser, createItem);
 
 export default router;

@@ -1,5 +1,6 @@
 import { Express } from "express";
 import authRoutes from "./modules/auth/auth.routes";
+import itemsRoutes from "./modules/items/items.routes";
 import healthRoutes from "./modules/health/health.routes";
 
 /**
@@ -11,5 +12,5 @@ export function setupRoutes(app: Express): void {
 
   // Authentication routes
   app.use("/api/v1/auth", authRoutes);
+  app.use("/api/v1/items", itemsRoutes);
 }
-
