@@ -40,15 +40,46 @@ export const createItem = async (
   }
 };
 
-export const getItems = async (
-  req: UserRequest,
-  res: Response
-): Promise<void> => {};
+export const getItems = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userReq = req as UserRequest;
+    const { status } = userReq.query;
+    const { clerkUserId } = userReq.user;
+
+    const items = await itemService.getItems(
+      clerkUserId,
+      status as string | undefined
+    );
+
+    ApiResponse.success(res, items);
+  } catch (error: any) {
+    logger.error("Error in getItems controller:", error);
+    ApiResponse.error(res, "Failed to fetch items", 500);
+  }
+};
 
 export const getItemById = async (
-  req: UserRequest,
+  req: Request,
   res: Response
-): Promise<void> => {};
+): Promise<void> => {
+  try {
+    const userReq = req as UserRequest;
+    const { id } = userReq.params;
+    const { clerkUserId } = userReq.user;
+
+    const item = await itemService.getItemById(id, clerkUserId);
+
+    if (!item) {
+      ApiResponse.error(res, "Item not found", 404);
+      return;
+    }
+
+    ApiResponse.success(res, item);
+  } catch (error: any) {
+    logger.error("Error in getItemById controller:", error);
+    ApiResponse.error(res, "Failed to fetch item", 500);
+  }
+};
 
 export const getTodaysItems = async (
   req: UserRequest,
