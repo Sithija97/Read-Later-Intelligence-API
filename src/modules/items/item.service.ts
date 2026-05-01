@@ -1,5 +1,7 @@
 import Item from "./item.model";
 import { logger } from "../../shared/utils/logger";
+import { scrapeArticle } from "./article.scraper";
+import { articleQueue } from "../../config/queue";
 
 export interface CreateItemInput {
   url: string;
@@ -151,60 +153,28 @@ export class ItemService {
   }
 
   /**
-   * Queues article processing job
-   * This is a placeholder for background processing integration
+   * Adds an article processing job to the BullMQ queue.
+   *
+   * This method returns immediately — it only writes the job to Redis.
+   * The actual scraping happens in article.worker.ts, in a separate process.
+   *
+   * Using the itemId as the job name (second argument) makes it easy to look
+   * up a specific job in monitoring tools like Bull Board.
    */
   private async queueArticleProcessing(
     itemId: string,
-    url: string
+    url: string,
   ): Promise<void> {
-    // TODO: Replace with actual queue system (Bull, BullMQ, etc.)
-    // Example with Bull:
-    // await articleProcessingQueue.add('process-article', { itemId, url });
-
-    logger.info(`Queued article processing for item: ${itemId}`);
-
-    // Simulate async processing with setTimeout (for demo/development)
-    // In production, this would be handled by a queue worker
-    setTimeout(() => {
-      this.processArticleMetadata(itemId, url).catch((error) => {
-        logger.error(`Background processing failed for ${itemId}:`, error);
-      });
-    }, 3000); // 3 second delay to simulate processing time
+    await articleQueue.add(itemId, { itemId, url });
+    logger.info(`Job added to queue for item: ${itemId}`);
   }
 
   /**
-   * Fetches article metadata (placeholder implementation)
-   * TODO: Replace with actual article scraping logic
+   * Fetches article metadata by scraping the real URL.
+   * Delegates to the article scraper module.
    */
   private async fetchArticleMetadata(url: string) {
-    // TODO: Implement real article fetching using:
-    // - Puppeteer/Playwright for dynamic content
-    // - Cheerio for static HTML parsing
-    // - Mercury Parser or similar for article extraction
-    // - OpenGraph/meta tags for metadata
-
-    logger.info(`Fetching metadata for URL: ${url}`);
-
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // Return dummy data matching the expected structure
-    // Replace this with actual scraping logic
-    return {
-      title:
-        "How to Build Micro Frontends in React with Vite and Module Federation",
-      source: new URL(url).hostname.replace("www.", ""),
-      wordCount: 1400,
-      difficulty: "medium" as const,
-      summary: [
-        "Skimming is the default reading mode",
-        "Long-form content still matters",
-        "Context switching reduces comprehension",
-      ],
-      content:
-        "<p>This is cleaned article text content. In a real implementation, this would contain the full article content extracted from the URL.</p><p>The content should be cleaned of ads, navigation, and other non-article elements.</p>",
-    };
+    return scrapeArticle(url);
   }
 
   /**
@@ -225,12 +195,13 @@ export class ItemService {
           title: metadata.title,
           source: metadata.source,
           wordCount: metadata.wordCount,
+          readingTimeMinutes: metadata.readingTimeMinutes,
           difficulty: metadata.difficulty,
           summary: metadata.summary,
           content: metadata.content,
           status: "ready", // Mark as ready after successful processing
         },
-        { new: true } // Return updated document
+        { new: true }, // Return updated document
       );
 
       if (!updatedItem) {
@@ -238,12 +209,12 @@ export class ItemService {
       }
 
       logger.info(
-        `Article processing completed for item: ${itemId} - "${metadata.title}"`
+        `Article processing completed for item: ${itemId} - "${metadata.title}"`,
       );
     } catch (error) {
       logger.error(
         `Failed to process article metadata for item ${itemId}:`,
-        error
+        error,
       );
 
       // Update item status to failed

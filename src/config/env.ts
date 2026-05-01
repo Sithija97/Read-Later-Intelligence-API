@@ -16,6 +16,9 @@ export const env = {
 
   // Clerk
   CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
+
+  // Redis (used by BullMQ job queue)
+  REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
 } as const;
 
 /**
@@ -31,8 +34,7 @@ export function validateEnv(): void {
 
   if (missing.length > 0) {
     throw new Error(
-      `Missing required environment variables: ${missing.map((m) => m.key).join(", ")}`
+      `Missing required environment variables: ${missing.map((m) => m.key).join(", ")}`,
     );
   }
 }
-
