@@ -2,6 +2,7 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 
 type ItemStatus = "created" | "processing" | "ready" | "failed";
 type ItemDifficulty = "easy" | "medium" | "hard";
+type ItemWorthReadingFeedback = "yes" | "no" | "unanswered";
 
 interface IItem {
   url: string;
@@ -16,6 +17,7 @@ interface IItem {
   isCompleted: boolean;
   isSkimmed: boolean;
   savedAt: Date;
+  worthReadingFeedback: ItemWorthReadingFeedback;
   clerkUserId: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -110,6 +112,14 @@ const itemSchema: Schema<ItemDocument, ItemModel> = new Schema(
       default: Date.now,
       index: -1,
     },
+    worthReadingFeedback: {
+      type: String,
+      enum: {
+        values: ["yes", "no", "unanswered"],
+        message: "{VALUE} is not a valid worth reading feedback",
+      },
+      default: "unanswered",
+    },
   },
   {
     timestamps: true,
@@ -122,6 +132,7 @@ itemSchema.index({ clerkUserId: 1, url: 1 }, { unique: true });
 itemSchema.index({ status: 1 });
 itemSchema.index({ savedAt: -1 });
 itemSchema.index({ isCompleted: 1 });
+itemSchema.index({ worthReadingFeedback: 1 });
 
 // Derive fields before save
 itemSchema.pre("save", async function (this: ItemDocument) {
