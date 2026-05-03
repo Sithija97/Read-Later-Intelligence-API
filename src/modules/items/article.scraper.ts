@@ -2,6 +2,7 @@ import axios from "axios";
 import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { logger } from "../../shared/utils/logger";
+import { generateAISummary } from "./ai.summarizer";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -212,8 +213,6 @@ export async function scrapeArticle(url: string): Promise<ArticleMetadata> {
   const wordCount = countWords(plainText);
   const readingTimeMinutes = estimateReadingTime(wordCount, READING_WPM);
   const skimTimeMinutes = estimateReadingTime(wordCount, SKIM_WPM);
-  const difficulty = calculateDifficulty(plainText);
-  const summary = extractSummary(plainText);
 
   // Derive source from the URL hostname, stripping "www."
   const source = new URL(url).hostname.replace(/^www\./, "");
@@ -225,8 +224,17 @@ export async function scrapeArticle(url: string): Promise<ArticleMetadata> {
     document.querySelector("title")?.textContent?.trim() ||
     url;
 
+  // ── Step 5: AI summary (with extractive fallback) ──────────────────────────
+  // We attempt AI summarization first. If OPENAI_API_KEY is not set or the
+  // call fails, generateAISummary returns null and we fall back to the local
+  // extractive approach. The article is still fully usable either way.
+  const aiResult = await generateAISummary(plainText, title);
+
+  const summary = aiResult?.summary ?? extractSummary(plainText);
+  const difficulty = aiResult?.difficulty ?? calculateDifficulty(plainText);
+
   logger.info(
-    `Article stats — words: ${wordCount}, readTime: ${readingTimeMinutes}min, difficulty: ${difficulty}`,
+    `Article stats — words: ${wordCount}, readTime: ${readingTimeMinutes}min, difficulty: ${difficulty}, summary source: ${aiResult ? "AI" : "extractive"}`,
   );
 
   return {

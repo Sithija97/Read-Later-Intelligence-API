@@ -223,6 +223,197 @@ export class ItemService {
       });
     }
   }
+
+  // ─── New endpoints ─────────────────────────────────────────────────────────
+
+  /**
+   * GET /items/today
+   *
+   * Returns the user's daily reading queue: up to 3 items that are:
+   *   - status: "ready"     (fully processed, content available)
+   *   - isCompleted: false  (not yet read)
+   *   - isSkimmed: false    (not yet skimmed)
+   *
+   * Sorted oldest-first so the user works through articles in the order
+   * they saved them (FIFO — first in, first out). Limited to 3 to enforce
+   * the app's scarcity mechanic.
+   */
+  async getTodaysItems(clerkUserId: string): Promise<any[]> {
+    try {
+      const now = new Date();
+      const items = await Item.find({
+        clerkUserId,
+        status: "ready",
+        isCompleted: false,
+        isSkimmed: false,
+        // Exclude items that are currently snoozed.
+        // $or means: either no snoozedUntil date at all, OR the snooze
+        // has already expired. This makes snoozes self-healing — no cron
+        // job needed to reset them.
+        $or: [{ snoozedUntil: null }, { snoozedUntil: { $lte: now } }],
+      })
+        .sort({ savedAt: 1 })
+        .limit(3)
+        .lean();
+
+      return items.map((item) => ({
+        id: item._id.toString(),
+        url: item.url,
+        title: item.title,
+        source: item.source,
+        wordCount: item.wordCount,
+        readingTimeMinutes: item.readingTimeMinutes,
+        difficulty: item.difficulty,
+        summary: item.summary,
+        status: item.status,
+        savedAt: item.savedAt,
+        isCompleted: item.isCompleted,
+        isSkimmed: item.isSkimmed,
+      }));
+    } catch (error) {
+      logger.error("Error fetching today's items:", error);
+      throw new Error("Failed to fetch today's items");
+    }
+  }
+
+  /**
+   * PATCH /items/:id/complete
+   *
+   * Marks an item as read or skimmed. These are mutually exclusive states:
+   *   - isCompleted: true  → user read the full article
+   *   - isSkimmed: true    → user skimmed only the summary
+   *
+   * Why not one "status" field for this?
+   * The item's top-level `status` field represents the processing lifecycle
+   * (processing → ready → failed). Read/skim state is a separate dimension
+   * (the user's engagement with the content), so we keep them as boolean flags.
+   */
+  async completeItem(
+    itemId: string,
+    clerkUserId: string,
+    isCompleted: boolean,
+    isSkimmed: boolean,
+  ): Promise<any | null> {
+    try {
+      const item = await Item.findOneAndUpdate(
+        { _id: itemId, clerkUserId }, // Scope to user — prevents updating someone else's items
+        { isCompleted, isSkimmed },
+        { new: true },
+      ).lean();
+
+      if (!item) return null;
+
+      return {
+        id: item._id.toString(),
+        isCompleted: item.isCompleted,
+        isSkimmed: item.isSkimmed,
+      };
+    } catch (error) {
+      logger.error(`Error completing item ${itemId}:`, error);
+      throw new Error("Failed to update item");
+    }
+  }
+
+  /**
+   * PATCH /items/:id/feedback
+   *
+   * Records the user's post-read rating: "was this worth saving?"
+   * Optionally includes a free-text note.
+   *
+   * This data is the long-term value of the app — it could be used later
+   * to build personalized recommendations ("save articles like the ones
+   * you rated 'yes'").
+   */
+  async submitFeedback(
+    itemId: string,
+    clerkUserId: string,
+    worthReadingFeedback: "yes" | "no",
+    note?: string,
+  ): Promise<any | null> {
+    try {
+      const updatePayload: Record<string, any> = { worthReadingFeedback };
+      if (note !== undefined) updatePayload.note = note;
+
+      const item = await Item.findOneAndUpdate(
+        { _id: itemId, clerkUserId },
+        updatePayload,
+        { new: true },
+      ).lean();
+
+      if (!item) return null;
+
+      return {
+        id: item._id.toString(),
+        worthReadingFeedback: item.worthReadingFeedback,
+      };
+    } catch (error) {
+      logger.error(`Error submitting feedback for item ${itemId}:`, error);
+      throw new Error("Failed to submit feedback");
+    }
+  }
+
+  /**
+   * DELETE /items/:id
+   *
+   * Hard deletes the item from MongoDB.
+   *
+   * We're using hard delete here (permanent removal) because:
+   * - This is a personal productivity tool, not a multi-tenant system
+   * - There's no audit trail requirement
+   * - Simpler than maintaining a soft-delete flag
+   *
+   * If you ever need to recover deleted items or show them in a "trash" view,
+   * switch to soft delete: add `isDeleted: boolean` to the schema and filter
+   * it out of all queries.
+   */
+  async deleteItem(itemId: string, clerkUserId: string): Promise<boolean> {
+    try {
+      const result = await Item.deleteOne({ _id: itemId, clerkUserId });
+      return result.deletedCount === 1;
+    } catch (error) {
+      logger.error(`Error deleting item ${itemId}:`, error);
+      throw new Error("Failed to delete item");
+    }
+  }
+
+  /**
+   * PATCH /items/:id/snooze
+   *
+   * Snoozes an item until midnight tonight (the start of tomorrow).
+   * The item will reappear automatically in the next day's /today query
+   * because getTodaysItems filters out items where snoozedUntil > now.
+   *
+   * Why midnight of the NEXT day and not 24 hours from now?
+   * Snooze is a "not today" action, not a "remind me in 24 hours" alarm.
+   * Snoozing at 11pm should hide the item until tomorrow morning,
+   * not until 11pm tomorrow.
+   */
+  async snoozeItem(itemId: string, clerkUserId: string): Promise<any | null> {
+    try {
+      // Calculate midnight at the start of tomorrow in the server's local time.
+      // For production you'd want to accept the user's timezone offset,
+      // but for now server-local is a practical default.
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+
+      const item = await Item.findOneAndUpdate(
+        { _id: itemId, clerkUserId },
+        { snoozedUntil: tomorrow },
+        { new: true },
+      ).lean();
+
+      if (!item) return null;
+
+      return {
+        id: item._id.toString(),
+        snoozedUntil: tomorrow,
+      };
+    } catch (error) {
+      logger.error(`Error snoozing item ${itemId}:`, error);
+      throw new Error("Failed to snooze item");
+    }
+  }
 }
 
 export const itemService = new ItemService();
