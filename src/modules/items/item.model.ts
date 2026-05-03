@@ -18,6 +18,8 @@ interface IItem {
   isSkimmed: boolean;
   savedAt: Date;
   worthReadingFeedback: ItemWorthReadingFeedback;
+  note?: string;
+  snoozedUntil?: Date;
   clerkUserId: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -120,11 +122,23 @@ const itemSchema: Schema<ItemDocument, ItemModel> = new Schema(
       },
       default: "unanswered",
     },
+    note: {
+      type: String,
+      trim: true,
+      maxlength: [1000, "Note cannot exceed 1000 characters"],
+    },
+    // Date until which the item is snoozed. Null means not snoozed.
+    // The /today query filters out items where snoozedUntil > now,
+    // so items automatically reappear the next day with no extra work.
+    snoozedUntil: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
     versionKey: false,
-  }
+  },
 );
 
 // Indexes
@@ -157,7 +171,7 @@ itemSchema.methods.markAsCompleted = function (): Promise<ItemDocument> {
 };
 
 itemSchema.methods.updateStatus = function (
-  newStatus: ItemStatus
+  newStatus: ItemStatus,
 ): Promise<ItemDocument> {
   const validStatuses: ItemStatus[] = [
     "created",
@@ -174,7 +188,7 @@ itemSchema.methods.updateStatus = function (
 
 // Statics
 itemSchema.statics.findByStatus = function (
-  status: ItemStatus
+  status: ItemStatus,
 ): Promise<ItemDocument[]> {
   return this.find({ status }).exec();
 };
